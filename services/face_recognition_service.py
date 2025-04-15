@@ -2,9 +2,7 @@ import face_recognition
 import pickle
 import cv2
 import numpy as np
-
 from config import FACE_ENCODINGS_PATH
-
 
 class FaceRecognitionService:
     def __init__(self):
@@ -31,10 +29,10 @@ class FaceRecognitionService:
             enc = face_recognition.face_encodings(rgb_image)
             if enc:
                 encodings.append(enc[0])
-            if encodings:
-                avg_encoding = np.mean(encodings, axis=0)
-                self.known_faces[name] = avg_encoding
-                with open(FACE_ENCODINGS_PATH, 'wb') as f:
-                    pickle.dump(self.known_faces, f)
-                return True
+        if encodings:
+            avg_encoding = np.mean(encodings, axis=0)
+            self.known_faces[name] = avg_encoding
+            with open(FACE_ENCODINGS_PATH, 'wb') as f:
+                pickle.dump(self.known_faces, f)
+            return True
         return False
