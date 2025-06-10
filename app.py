@@ -202,29 +202,11 @@ def process_image():
             minSize=(30, 30)
         )
 
-        # Vẽ khung và cảm xúc lên ảnh
-        for idx, ((x, y, w, h), result) in enumerate(zip(faces, face_results)):
-            emotion_percentages = result["emotion_percentages"]
-            # Tìm cảm xúc lớn nhất
-            dominant_emotion = max(emotion_percentages, key=emotion_percentages.get)
-            dominant_percentage = emotion_percentages[dominant_emotion]
-            # Vẽ khung màu xanh quanh khuôn mặt
-            cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
-            # Thêm văn bản cảm xúc (ví dụ: "Neutral - 62%")
-            text = f"{dominant_emotion} - {dominant_percentage:.0f}%"
-            cv2.putText(image, text, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-
-        # Lưu ảnh đã vẽ
-        timestamp_str = current_time.strftime("%Y%m%d_%H%M%S")
-        img_filename = f"{IMAGE_DIR}/received_{timestamp_str}.jpg"
-        cv2.imwrite(img_filename, image)
-        logger.info(f"[SAVE_IMAGE]: Saved image with face boxes and emotions at {img_filename}")
-
         # Nhận diện học sinh và lưu Firestore
         results = []
         start_recognize = time.time()
         recognize_times = []
-        for result in face_results:
+        for idx, ((x, y, w, h), result) in enumerate(zip(faces, face_results)):
             face_roi = result["face"]
             emotion_percentages = result["emotion_percentages"]
 
@@ -290,12 +272,33 @@ def process_image():
                 "emotion_percentages": emotion_percentages
             })
 
+        # Vẽ khung, tên học sinh, và cảm xúc lên ảnh
+        for idx, ((x, y, w, h), result) in enumerate(zip(faces, results)):
+            student_name = result["student_name"]
+            emotion_percentages = result["emotion_percentages"]
+            # Tìm cảm xúc lớn nhất
+            dominant_emotion = max(emotion_percentages, key=emotion_percentages.get)
+            dominant_percentage = emotion_percentages[dominant_emotion]
+            # Vẽ khung màu xanh quanh khuôn mặt
+            cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            # Thêm tên học sinh phía trên khung
+            cv2.putText(image, student_name, (x, y - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+            # Thêm cảm xúc và phần trăm bên dưới tên
+            emotion_text = f"{dominant_emotion} - {dominant_percentage:.0f}%"
+            cv2.putText(image, emotion_text, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+        # Lưu ảnh đã vẽ
+        timestamp_str = current_time.strftime("%Y%m%d_%H%M%S")
+        img_filename = f"{IMAGE_DIR}/received_{timestamp_str}.jpg"
+        cv2.imwrite(img_filename, image)
+        logger.info(f"[SAVE_IMAGE]: Saved image with face boxes, names, and emotions at {img_filename}")
+
         recognize_total = time.time() - start_recognize
         avg_recognize_time = sum(recognize_times) / len(recognize_times) if recognize_times else 0
-        logger.info(f"[RECOGNIZE_STUDENTS]: Recognized {len([r for r in results if r['student_id']]) for r in results} students "
+        logger.info(f"[RECOGNIZE_STUDENTS]: Recognized {len([r for r in results if r['student_id'] != 'Unknown'])} students "
                     f"(avg {avg_recognize_time:.3f}s/face, total {recognize_total:.2f}s)")
         logger.info(f"[FIRESTORE_OPERATIONS]: Saved emotion stats and checked alerts for "
-                    f"{len([r for r in results if r['student_id']]) for r in results} students (took {recognize_total:.2f}s)")
+                    f"{len([r for r in results if r['student_id'] != 'Unknown'])} students (took {recognize_total:.2f}s)")
 
         total_time = time.time() - start_request
         logger.info(f"[END_REQUEST]: Completed request for class_id={class_id} (total {total_time:.2f}s)")
@@ -305,7 +308,6 @@ def process_image():
     except Exception as e:
         logger.error(f"[ERROR]: Failed to process request: {str(e)}")
         return jsonify({"error": str(e)}), 500
-
 @app.route('/predict', methods=['POST'])
 def predict():
     try:

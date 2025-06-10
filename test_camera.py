@@ -8,7 +8,7 @@ from datetime import datetime
 import pytz
 
 # Cấu hình
-SERVER_URL = "https://5af7-58-187-196-90.ngrok-free.app/process_image"  # Thay bằng URL ngrok thực tế
+SERVER_URL = "https://272a-14-245-240-202.ngrok-free.app/process_image"  # Thay bằng URL ngrok thực tế
 IMAGE_DIR = "camera_images"
 VN_TIMEZONE = pytz.timezone('Asia/Ho_Chi_Minh')
 INTERVAL_SECONDS = 15
@@ -75,45 +75,74 @@ def main():
         # Khởi tạo camera
         cap = setup_camera()
 
-        while True:
-            # Lấy thời gian hiện tại
-            timestamp = datetime.now(VN_TIMEZONE).strftime("%Y%m%d_%H%M%S")
-            logger.info(f"Bắt đầu chu kỳ chụp ảnh tại {timestamp}")
+        # Tạo cửa sổ hiển thị
+        cv2.namedWindow("Camera Feed", cv2.WINDOW_NORMAL)
+        cv2.namedWindow("Captured Frame", cv2.WINDOW_NORMAL)
 
-            # Chụp ảnh
+        # Thời gian chụp ảnh lần cuối
+        last_capture_time = time.time()
+        # Biến lưu khung hình đã chụp
+        captured_image = None
+
+        while True:
+            # Đọc khung hình từ camera
             image = capture_image(cap)
             if image is None:
-                time.sleep(INTERVAL_SECONDS)
+                logger.warning("Không thể đọc khung hình, thử lại...")
+                time.sleep(0.1)
                 continue
 
-            # Lưu ảnh để debug
-            save_image(image, timestamp)
+            # Hiển thị video trực tiếp
+            cv2.imshow("Camera Feed", image)
 
-            # Mã hóa ảnh
-            img_base64 = encode_image(image)
-            logger.info("Đã mã hóa ảnh thành base64")
+            # Hiển thị khung hình đã chụp (nếu có)
+            if captured_image is not None:
+                cv2.imshow("Captured Frame", captured_image)
 
-            # Gửi lên server
-            response = send_image_to_server(img_base64)
-            if response:
-                logger.info(f"Kết quả nhận diện: {response.get('results', [])}")
-            else:
-                logger.warning("Không nhận được phản hồi từ server")
+            # Kiểm tra phím nhấn để thoát
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                logger.info("Người dùng nhấn 'q' để thoát")
+                break
 
-            # Đợi 15 giây
-            logger.info(f"Đợi {INTERVAL_SECONDS} giây trước khi chụp tiếp...")
-            time.sleep(INTERVAL_SECONDS)
+            # Kiểm tra thời gian để chụp và gửi ảnh (mỗi 15 giây)
+            current_time = time.time()
+            if current_time - last_capture_time >= INTERVAL_SECONDS:
+                # Lấy thời gian hiện tại
+                timestamp = datetime.now(VN_TIMEZONE).strftime("%Y%m%d_%H%M%S")
+                logger.info(f"Bắt đầu chu kỳ chụp ảnh tại {timestamp}")
+
+                # Lưu khung hình vừa chụp
+                captured_image = image.copy()  # Sao chép để hiển thị trong cửa sổ riêng
+
+                # Lưu ảnh để debug
+                save_image(image, timestamp)
+
+                # Mã hóa ảnh
+                img_base64 = encode_image(image)
+                logger.info("Đã mã hóa ảnh thành base64")
+
+                # Gửi lên server
+                response = send_image_to_server(img_base64)
+                if response:
+                    logger.info(f"Kết quả nhận diện: {response.get('results', [])}")
+                else:
+                    logger.warning("Không nhận được phản hồi từ server")
+
+                # Cập nhật thời gian chụp ảnh
+                last_capture_time = current_time
+                logger.info(f"Đợi {INTERVAL_SECONDS} giây trước khi chụp tiếp...")
 
     except KeyboardInterrupt:
         logger.info("Dừng chương trình bởi người dùng")
     except Exception as e:
         logger.error(f"Lỗi chương trình: {str(e)}")
     finally:
-        # Giải phóng camera
+        # Giải phóng camera và đóng cửa sổ
         if 'cap' in locals():
             cap.release()
             logger.info("Đã giải phóng camera")
         cv2.destroyAllWindows()
+        logger.info("Đã đóng tất cả cửa sổ OpenCV")
 
 if __name__ == "__main__":
     main()
