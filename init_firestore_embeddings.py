@@ -136,7 +136,9 @@ def update_student_embedding_manual(students_folders, class_id='cl_012'):
 if __name__ == "__main__":
     # Danh sách các cặp {studentId, image_folder_path}
     students_folders = [
-        ("std_001", "/Users/nguyenquangtruong/Desktop/HocTap2/PBL5/SV_SmartClassroom/team_data/Truong"),
+        ("std_004", "/Users/nguyenquangtruong/Desktop/HocTap2/PBL5/SV_SmartClassroom/team_data/Dan"),
+        ("std_003", "/Users/nguyenquangtruong/Desktop/HocTap2/PBL5/SV_SmartClassroom/team_data/Dung"),
+        ("std_005", "/Users/nguyenquangtruong/Desktop/HocTap2/PBL5/SV_SmartClassroom/team_data/Trong"),
     ]
 
     update_student_embedding_manual(students_folders, class_id='cl_012')

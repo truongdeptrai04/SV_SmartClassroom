@@ -8,6 +8,7 @@ import firebase_admin
 from config import FIREBASE_CREDENTIALS
 from google.cloud.firestore_v1.base_query import FieldFilter
 from multiprocessing import Pool
+import time
 
 class FaceRecognitionService:
     def __init__(self, dataset_path='/Users/nguyenquangtruong/Desktop/HocTap2/PBL5/SV_SmartClassroom/team_data'):
@@ -75,10 +76,12 @@ class FaceRecognitionService:
                 return "Unknown", None
 
             image = self.resize_image(image)
+            self.logger.info("Starting face recognition")
+            start_time = time.time()
             embedding = DeepFace.represent(
                 image,
                 model_name='Facenet',
-                detector_backend='retinaface',  # Changed from 'opencv' to 'retinaface'
+                detector_backend='retinaface',
                 enforce_detection=False
             )
             if not embedding:
@@ -89,7 +92,7 @@ class FaceRecognitionService:
             min_distance = float('inf')
             recognized_name = "Unknown"
             recognized_id = None
-            threshold = 1.0
+            threshold = 0.9
 
             for name, data in self.embedding_cache.get(class_id, {}).items():
                 distance = np.linalg.norm(embedding - data['embedding'])
@@ -99,12 +102,11 @@ class FaceRecognitionService:
                     recognized_name = name
                     recognized_id = data['studentId']
 
+            recognize_time = time.time() - start_time
+            self.logger.info(f"Completed face recognition, recognized: {recognized_name} (ID: {recognized_id}, distance: {min_distance:.2f}, took {recognize_time:.2f}s)")
             if min_distance < threshold:
-                self.logger.info(
-                    f"Recognized student: {recognized_name} (ID: {recognized_id}, distance: {min_distance:.2f}) in class {class_id}")
                 return recognized_name, recognized_id
             else:
-                self.logger.warning(f"No match found in class {class_id}, min distance: {min_distance:.2f}")
                 return "Unknown", None
         except Exception as e:
             self.logger.error(f"Error in recognize for class {class_id}: {str(e)}")
@@ -118,7 +120,7 @@ class FaceRecognitionService:
                 emb = DeepFace.represent(
                     image,
                     model_name='Facenet',
-                    detector_backend='retinaface',  # Changed to 'retinaface' for consistency
+                    detector_backend='retinaface',
                     enforce_detection=False
                 )
                 if emb:
@@ -174,7 +176,7 @@ class FaceRecognitionService:
             emb = DeepFace.represent(
                 img,
                 model_name='Facenet',
-                detector_backend='retinaface',  # Changed to 'retinaface'
+                detector_backend='retinaface',
                 enforce_detection=False
             )
             if emb and emb[0]['embedding']:

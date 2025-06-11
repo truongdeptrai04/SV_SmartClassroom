@@ -8,7 +8,7 @@ from datetime import datetime
 import pytz
 
 # Cấu hình
-SERVER_URL = "https://272a-14-245-240-202.ngrok-free.app/process_image"  # Thay bằng URL ngrok thực tế
+SERVER_URL = "https://bb0c-2402-800-777c-8527-54f-7632-aab3-fc9a.ngrok-free.app/process_image"  # Thay bằng URL ngrok thực tế
 IMAGE_DIR = "camera_images"
 VN_TIMEZONE = pytz.timezone('Asia/Ho_Chi_Minh')
 INTERVAL_SECONDS = 15

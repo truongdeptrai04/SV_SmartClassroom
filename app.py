@@ -18,7 +18,6 @@ import logging
 
 app = Flask(__name__)
 
-# Cấu hình logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s %(levelname)s [%(name)s]: %(message)s',
@@ -37,31 +36,19 @@ VN_TIMEZONE = pytz.timezone('Asia/Ho_Chi_Minh')
 
 IMAGE_DIR = "received_images"
 last_processed = {}
-
-# Danh sách cảm xúc mong đợi
 EXPECTED_EMOTIONS = ["Angry", "Fear", "Happy", "Neutral", "Sad", "Surprise"]
 
 def schedule_emotion_summary(class_id, start_time, end_time, day_of_week):
     try:
         start_time_vn = datetime(
-            start_time.year,
-            start_time.month,
-            start_time.day,
-            start_time.hour,
-            start_time.minute,
-            start_time.second,
-            start_time.microsecond,
-            tzinfo=start_time.tzinfo
+            start_time.year, start_time.month, start_time.day,
+            start_time.hour, start_time.minute, start_time.second,
+            start_time.microsecond, tzinfo=start_time.tzinfo
         ).astimezone(VN_TIMEZONE)
         end_time_vn = datetime(
-            end_time.year,
-            end_time.month,
-            end_time.day,
-            end_time.hour,
-            end_time.minute,
-            end_time.second,
-            end_time.microsecond,
-            tzinfo=end_time.tzinfo
+            end_time.year, end_time.month, end_time.day,
+            end_time.hour, end_time.minute, end_time.second,
+            end_time.microsecond, tzinfo=end_time.tzinfo
         ).astimezone(VN_TIMEZONE)
         day_map = {
             'Monday': 'mon', 'Tuesday': 'tue', 'Wednesday': 'wed', 'Thursday': 'thu',
@@ -83,14 +70,11 @@ def schedule_emotion_summary(class_id, start_time, end_time, day_of_week):
 def schedule_all_classes():
     try:
         logger.info("Refreshing scheduler for all classes")
-        scheduler.remove_all_jobs()  # Xóa các job cũ
+        scheduler.remove_all_jobs()
         docs = firestore_service.db.collection('Classes').stream()
         for doc in docs:
             class_data = doc.to_dict()
-            start_time = class_data['startTime']
-            end_time = class_data['endTime']
-            day_of_week = class_data['dayOfWeek']
-            schedule_emotion_summary(doc.id, start_time, end_time, day_of_week)
+            schedule_emotion_summary(doc.id, class_data['startTime'], class_data['endTime'], class_data['dayOfWeek'])
         logger.info("Completed scheduling for all classes")
     except Exception as e:
         logger.error(f"Error scheduling classes: {str(e)}")
@@ -120,42 +104,29 @@ def process_image():
         current_day = current_time.strftime('%A')
         logger.info(f"[START_REQUEST]: Processing image at {current_time} on {current_day}")
 
-        # Nhận và kiểm tra dữ liệu
         data = request.get_json()
         image_base64 = data.get('image')
         if not image_base64:
             logger.error("[DECODE_IMAGE]: No image provided")
             return jsonify({"error": "No image provided"}), 400
 
-        # Tìm lớp học
         class_id, class_data = firestore_service.get_class_by_time(current_time, current_day)
         if not class_id:
             logger.error("[CHECK_CLASS]: No class in session at this time")
             return jsonify({"error": "No class in session at this time"}), 400
 
         start_time = datetime(
-            class_data['startTime'].year,
-            class_data['startTime'].month,
-            class_data['startTime'].day,
-            class_data['startTime'].hour,
-            class_data['startTime'].minute,
-            class_data['startTime'].second,
-            class_data['startTime'].microsecond,
-            tzinfo=class_data['startTime'].tzinfo
+            class_data['startTime'].year, class_data['startTime'].month, class_data['startTime'].day,
+            class_data['startTime'].hour, class_data['startTime'].minute, class_data['startTime'].second,
+            class_data['startTime'].microsecond, tzinfo=class_data['startTime'].tzinfo
         ).astimezone(VN_TIMEZONE)
         end_time = datetime(
-            class_data['endTime'].year,
-            class_data['endTime'].month,
-            class_data['endTime'].day,
-            class_data['endTime'].hour,
-            class_data['endTime'].minute,
-            class_data['endTime'].second,
-            class_data['endTime'].microsecond,
-            tzinfo=class_data['endTime'].tzinfo
+            class_data['endTime'].year, class_data['endTime'].month, class_data['endTime'].day,
+            class_data['endTime'].hour, class_data['endTime'].minute, class_data['endTime'].second,
+            class_data['endTime'].microsecond, tzinfo=class_data['endTime'].tzinfo
         ).astimezone(VN_TIMEZONE)
         logger.info(f"[CHECK_CLASS]: Found class {class_id}: {start_time.strftime('%H:%M')} - {end_time.strftime('%H:%M')} (VN)")
 
-        # Kiểm tra và cập nhật scheduler nếu cần
         job = scheduler.get_job(f"summary_{class_id}")
         if not job or job.next_run_time.tzinfo != VN_TIMEZONE or \
            job.next_run_time.strftime('%H:%M') != end_time.strftime('%H:%M') or \
@@ -163,13 +134,11 @@ def process_image():
             logger.warning(f"[SCHEDULER]: Updating scheduler for class {class_id}")
             schedule_emotion_summary(class_id, class_data['startTime'], class_data['endTime'], class_data['dayOfWeek'])
 
-        # Kiểm tra tần suất xử lý (15s)
         if class_id in last_processed and time.time() - last_processed[class_id] < 15:
             logger.warning(f"[RATE_LIMIT]: Processing too frequent for class {class_id}, last processed {time.time() - last_processed[class_id]:.2f}s ago")
             return jsonify({"error": "Processing too frequent, please wait", "retry_after": 15}), 429, {"Retry-After": "15"}
         last_processed[class_id] = time.time()
 
-        # Giải mã ảnh
         start_decode = time.time()
         img_data = base64.b64decode(image_base64)
         image = cv2.imdecode(np.frombuffer(img_data, np.uint8), cv2.IMREAD_COLOR)
@@ -179,50 +148,49 @@ def process_image():
         decode_time = time.time() - start_decode
         logger.info(f"[DECODE_IMAGE]: Decoded base64 image, shape={image.shape} (took {decode_time:.2f}s)")
 
-        # Nhận diện khuôn mặt và cảm xúc
-        start_detect = time.time()
-        face_results = emotion_service.detect_faces_and_emotions(image)
-        detect_time = time.time() - start_detect
+        # Module 1: Phát hiện khuôn mặt
+        start_face_detection = time.time()
+        face_results = emotion_service.detect_faces(image)
+        face_detection_time = time.time() - start_face_detection
         if not face_results:
-            logger.info(f"[DETECT_FACES_EMOTIONS]: No faces detected (took {detect_time:.2f}s)")
-            # Lưu ảnh gốc nếu không có khuôn mặt
+            logger.info(f"[FACE_DETECTION]: No faces detected (took {face_detection_time:.2f}s)")
             timestamp_str = current_time.strftime("%Y%m%d_%H%M%S")
             img_filename = f"{IMAGE_DIR}/received_{timestamp_str}.jpg"
             cv2.imwrite(img_filename, image)
             logger.info(f"[SAVE_IMAGE]: Saved image at {img_filename}")
             return jsonify({"results": [], "message": "No faces detected"}), 200
-        logger.info(f"[DETECT_FACES_EMOTIONS]: Detected {len(face_results)} faces and emotions (took {detect_time:.2f}s)")
+        logger.info(f"[FACE_DETECTION]: Detected {len(face_results)} faces (took {face_detection_time:.2f}s)")
 
-        # Lấy tọa độ khuôn mặt từ EmotionDetectionService
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        faces = emotion_service.face_cascade.detectMultiScale(
-            gray,
-            scaleFactor=1.1,
-            minNeighbors=3,
-            minSize=(30, 30)
-        )
+        # Module 2: Nhận diện cảm xúc
+        emotion_results = []
+        start_emotion_detection = time.time()
+        for result in face_results:
+            face_roi = result["face"]
+            emotion_percentages = emotion_service.detect_emotions(face_roi)
+            result["emotion_percentages"] = emotion_percentages
+            emotion_results.append(result)
+        emotion_detection_time = time.time() - start_emotion_detection
+        logger.info(f"[EMOTION_DETECTION]: Detected emotions for {len(emotion_results)} faces (took {emotion_detection_time:.2f}s)")
 
-        # Nhận diện học sinh và lưu Firestore
+        # Module 3: Nhận diện học sinh và lưu Firestore
         results = []
-        start_recognize = time.time()
+        start_recognition = time.time()
         recognize_times = []
-        for idx, ((x, y, w, h), result) in enumerate(zip(faces, face_results)):
+        for idx, result in enumerate(emotion_results):
             face_roi = result["face"]
             emotion_percentages = result["emotion_percentages"]
+            x, y, w, h = result["x"], result["y"], result["w"], result["h"]
 
-            # Kiểm tra emotion_percentages
             if set(emotion_percentages.keys()) != set(EXPECTED_EMOTIONS):
-                logger.error(f"[DETECT_FACES_EMOTIONS]: Invalid emotion keys: {emotion_percentages.keys()}")
+                logger.error(f"[EMOTION_DETECTION]: Invalid emotion keys: {emotion_percentages.keys()}")
                 return jsonify({"error": "Invalid emotion percentages"}), 500
-            logger.info(f"[DETECT_FACES_EMOTIONS]: Emotion percentages: {emotion_percentages}")
+            logger.info(f"[EMOTION_DETECTION]: Emotion percentages for face {idx}: {emotion_percentages}")
 
-            # Nhận diện học sinh
             recognize_start = time.time()
             student_name, student_id = face_service.recognize(face_roi, class_id)
             recognize_time = time.time() - recognize_start
             recognize_times.append(recognize_time)
 
-            # Kiểm tra sinh viên thuộc lớp qua StudentClasses
             if student_id and student_id != "Unknown":
                 student_class = firestore_service.db.collection('StudentClasses')\
                     .where(filter=FieldFilter('studentId', '==', student_id))\
@@ -236,22 +204,15 @@ def process_image():
             if student_name == "Unknown":
                 logger.warning(f"[RECOGNIZE_STUDENTS]: Unknown student for face in class {class_id}")
 
-            # Lưu StudentEmotionStats cho sinh viên được nhận diện
             if student_id and student_id != "Unknown":
                 firestore_service.save_student_emotion(student_id, class_id, emotion_percentages)
 
-                # Kiểm tra cảm xúc tiêu cực
                 recent_stats = firestore_service.db.collection('StudentEmotionStats')\
                     .where(filter=FieldFilter('studentId', '==', student_id))\
                     .where(filter=FieldFilter('classId', '==', class_id))\
                     .order_by('createAt', direction=firestore.Query.DESCENDING)\
                     .limit(3).stream()
                 sad_values = [stat.to_dict()['sad'] for stat in recent_stats]
-                recent_stats = firestore_service.db.collection('StudentEmotionStats')\
-                    .where(filter=FieldFilter('studentId', '==', student_id))\
-                    .where(filter=FieldFilter('classId', '==', class_id))\
-                    .order_by('createAt', direction=firestore.Query.DESCENDING)\
-                    .limit(3).stream()
                 angry_values = [stat.to_dict()['angry'] for stat in recent_stats]
 
                 if len(sad_values) >= 3 and all(s > 50 for s in sad_values) or \
@@ -265,40 +226,41 @@ def process_image():
                         'timestamp': firestore.SERVER_TIMESTAMP
                     })
 
-            # Thêm vào kết quả (bao gồm cả Unknown)
             results.append({
                 "student_name": student_name,
                 "student_id": student_id,
-                "emotion_percentages": emotion_percentages
+                "emotion_percentages": emotion_percentages,
+                "x": x,
+                "y": y,
+                "w": w,
+                "h": h
             })
 
+        recognition_time = time.time() - start_recognition
+        logger.info(f"[RECOGNITION_FIRESTORE]: Recognized {len([r for r in results if r['student_id'] != 'Unknown'])} students and saved to Firestore (took {recognition_time:.2f}s)")
+
         # Vẽ khung, tên học sinh, và cảm xúc lên ảnh
-        for idx, ((x, y, w, h), result) in enumerate(zip(faces, results)):
+        for result in results:
             student_name = result["student_name"]
             emotion_percentages = result["emotion_percentages"]
-            # Tìm cảm xúc lớn nhất
             dominant_emotion = max(emotion_percentages, key=emotion_percentages.get)
             dominant_percentage = emotion_percentages[dominant_emotion]
-            # Vẽ khung màu xanh quanh khuôn mặt
+            x, y, w, h = result["x"], result["y"], result["w"], result["h"]
             cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
-            # Thêm tên học sinh phía trên khung
             cv2.putText(image, student_name, (x, y - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-            # Thêm cảm xúc và phần trăm bên dưới tên
             emotion_text = f"{dominant_emotion} - {dominant_percentage:.0f}%"
             cv2.putText(image, emotion_text, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
-        # Lưu ảnh đã vẽ
         timestamp_str = current_time.strftime("%Y%m%d_%H%M%S")
         img_filename = f"{IMAGE_DIR}/received_{timestamp_str}.jpg"
         cv2.imwrite(img_filename, image)
         logger.info(f"[SAVE_IMAGE]: Saved image with face boxes, names, and emotions at {img_filename}")
 
-        recognize_total = time.time() - start_recognize
         avg_recognize_time = sum(recognize_times) / len(recognize_times) if recognize_times else 0
         logger.info(f"[RECOGNIZE_STUDENTS]: Recognized {len([r for r in results if r['student_id'] != 'Unknown'])} students "
-                    f"(avg {avg_recognize_time:.3f}s/face, total {recognize_total:.2f}s)")
+                    f"(avg {avg_recognize_time:.3f}s/face, total {recognition_time:.2f}s)")
         logger.info(f"[FIRESTORE_OPERATIONS]: Saved emotion stats and checked alerts for "
-                    f"{len([r for r in results if r['student_id'] != 'Unknown'])} students (took {recognize_total:.2f}s)")
+                    f"{len([r for r in results if r['student_id'] != 'Unknown'])} students (took {recognition_time:.2f}s)")
 
         total_time = time.time() - start_request
         logger.info(f"[END_REQUEST]: Completed request for class_id={class_id} (total {total_time:.2f}s)")
@@ -308,6 +270,8 @@ def process_image():
     except Exception as e:
         logger.error(f"[ERROR]: Failed to process request: {str(e)}")
         return jsonify({"error": str(e)}), 500
+
+
 @app.route('/predict', methods=['POST'])
 def predict():
     try:
@@ -415,24 +379,14 @@ def check_class_schedule():
 
         class_data = class_ref.to_dict()
         start_time = datetime(
-            class_data['startTime'].year,
-            class_data['startTime'].month,
-            class_data['startTime'].day,
-            class_data['startTime'].hour,
-            class_data['startTime'].minute,
-            class_data['startTime'].second,
-            class_data['startTime'].microsecond,
-            tzinfo=class_data['startTime'].tzinfo
+            class_data['startTime'].year, class_data['startTime'].month, class_data['startTime'].day,
+            class_data['startTime'].hour, class_data['startTime'].minute, class_data['startTime'].second,
+            class_data['startTime'].microsecond, tzinfo=class_data['startTime'].tzinfo
         ).astimezone(VN_TIMEZONE)
         end_time = datetime(
-            class_data['endTime'].year,
-            class_data['endTime'].month,
-            class_data['endTime'].day,
-            class_data['endTime'].hour,
-            class_data['endTime'].minute,
-            class_data['endTime'].second,
-            class_data['endTime'].microsecond,
-            tzinfo=class_data['endTime'].tzinfo
+            class_data['endTime'].year, class_data['endTime'].month, class_data['endTime'].day,
+            class_data['endTime'].hour, class_data['endTime'].minute, class_data['endTime'].second,
+            class_data['endTime'].microsecond, tzinfo=class_data['endTime'].tzinfo
         ).astimezone(VN_TIMEZONE)
         logger.info(f"[CHECK_SCHEDULE]: Found class {class_id}: {class_data}")
         return jsonify({
